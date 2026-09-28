@@ -1,0 +1,251 @@
+CREATE DATABASE IF NOT EXISTS ravenstack_db;
+USE ravenstack_db;
+
+-- Drop tables in reverse dependency order to avoid foreign key errors on re-run
+DROP TABLE IF EXISTS feature_usage;
+DROP TABLE IF EXISTS support_tickets;
+DROP TABLE IF EXISTS churn_events;
+DROP TABLE IF EXISTS subscriptions;
+DROP TABLE IF EXISTS accounts;
+
+-- ===================================================
+-- 1. ACCOUNTS
+-- ===================================================
+CREATE TABLE accounts (
+    account_id VARCHAR(10) PRIMARY KEY,
+    account_name VARCHAR(50),
+    industry VARCHAR(30),
+    country VARCHAR(5),
+    signup_date DATE,
+    referral_source VARCHAR(20),
+    plan_tier VARCHAR(20),
+    seats INT,
+    is_trial BOOLEAN,
+    churn_flag BOOLEAN
+);
+
+-- ===================================================
+-- 2. SUBSCRIPTIONS
+-- ===================================================
+CREATE TABLE subscriptions (
+    subscription_id VARCHAR(10) PRIMARY KEY,
+    account_id VARCHAR(10),
+    start_date DATE,
+    end_date DATE,
+    plan_tier VARCHAR(20),
+    seats INT,
+    mrr_amount INT,
+    arr_amount INT,
+    is_trial BOOLEAN,
+    upgrade_flag BOOLEAN,
+    downgrade_flag BOOLEAN,
+    churn_flag BOOLEAN,
+    billing_frequency VARCHAR(15),
+    auto_renew_flag BOOLEAN,
+    FOREIGN KEY (account_id) REFERENCES accounts(account_id)
+);
+
+-- ===================================================
+-- 3. CHURN EVENTS
+-- ===================================================
+CREATE TABLE churn_events (
+    churn_event_id VARCHAR(10) PRIMARY KEY,
+    account_id VARCHAR(10),
+    churn_date DATE,
+    reason_code VARCHAR(30),
+    refund_amount_usd DECIMAL(10, 2),
+    preceding_upgrade_flag BOOLEAN,
+    preceding_downgrade_flag BOOLEAN,
+    is_reactivation BOOLEAN,
+    feedback_text TEXT,
+    FOREIGN KEY (account_id) REFERENCES accounts(account_id)
+);
+
+-- ===================================================
+-- 4. FEATURE USAGE
+-- ===================================================
+CREATE TABLE feature_usage (
+    usage_id VARCHAR(10),
+    subscription_id VARCHAR(10),
+    usage_date DATE,
+    feature_name VARCHAR(30),
+    usage_count INT,
+    usage_duration_secs INT,
+    error_count INT,
+    is_beta_feature BOOLEAN,
+    FOREIGN KEY (subscription_id) REFERENCES subscriptions(subscription_id)
+);
+
+-- ===================================================
+-- 5. SUPPORT TICKETS
+-- ===================================================
+CREATE TABLE support_tickets (
+    ticket_id VARCHAR(10) PRIMARY KEY,
+    account_id VARCHAR(10),
+    submitted_at DATETIME,
+    closed_at DATETIME,
+    resolution_time_hours DECIMAL(10, 2),
+    priority VARCHAR(15),
+    first_response_time_minutes INT,
+    satisfaction_score DECIMAL(3, 1),
+    escalation_flag BOOLEAN,
+    FOREIGN KEY (account_id) REFERENCES accounts(account_id)
+);
+
+
+-- ===================================================
+-- DATA LOADING SECTION
+-- ===================================================
+SET FOREIGN_KEY_CHECKS = 0;
+
+-- ---------------------------------------------------
+-- 1. LOAD ravenstack_accounts.csv
+-- ---------------------------------------------------
+LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/ravenstack_accounts.csv'
+INTO TABLE accounts
+FIELDS TERMINATED BY ',' 
+ENCLOSED BY '"' 
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(
+    @account_id, @account_name, @industry, @country, @signup_date, 
+    @referral_source, @plan_tier, @seats, @is_trial, @churn_flag
+)
+SET 
+    account_id      = NULLIF(NULLIF(TRIM(@account_id), ''), '\\N'),
+    account_name    = NULLIF(NULLIF(TRIM(@account_name), ''), '\\N'),
+    industry        = NULLIF(NULLIF(TRIM(@industry), ''), '\\N'),
+    country         = NULLIF(NULLIF(TRIM(@country), ''), '\\N'),
+    signup_date     = NULLIF(NULLIF(TRIM(@signup_date), ''), '\\N'),
+    referral_source = NULLIF(NULLIF(TRIM(@referral_source), ''), '\\N'),
+    plan_tier       = NULLIF(NULLIF(TRIM(@plan_tier), ''), '\\N'),
+    seats           = NULLIF(NULLIF(TRIM(@seats), ''), '\\N'),
+    is_trial        = CASE WHEN TRIM(@is_trial) = 'True' THEN 1 ELSE 0 END,
+    churn_flag      = CASE WHEN TRIM(@churn_flag) = 'True' THEN 1 ELSE 0 END;
+
+SELECT * FROM accounts LIMIT 5;
+-- ---------------------------------------------------
+-- 2. LOAD ravenstack_subscriptions.csv
+-- ---------------------------------------------------
+LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/ravenstack_subscriptions.csv'
+INTO TABLE subscriptions
+FIELDS TERMINATED BY ',' 
+ENCLOSED BY '"' 
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(
+    @subscription_id, @account_id, @start_date, @end_date, @plan_tier, 
+    @seats, @mrr_amount, @arr_amount, @is_trial, @upgrade_flag, 
+    @downgrade_flag, @churn_flag, @billing_frequency, @auto_renew_flag
+)
+SET 
+    subscription_id   = NULLIF(NULLIF(TRIM(@subscription_id), ''), '\\N'),
+    account_id        = NULLIF(NULLIF(TRIM(@account_id), ''), '\\N'),
+    start_date        = NULLIF(NULLIF(TRIM(@start_date), ''), '\\N'),
+    end_date          = NULLIF(NULLIF(TRIM(@end_date), ''), '\\N'),
+    plan_tier         = NULLIF(NULLIF(TRIM(@plan_tier), ''), '\\N'),
+    seats             = NULLIF(NULLIF(TRIM(@seats), ''), '\\N'),
+    mrr_amount        = NULLIF(NULLIF(TRIM(@mrr_amount), ''), '\\N'),
+    arr_amount        = NULLIF(NULLIF(TRIM(@arr_amount), ''), '\\N'),
+    is_trial          = CASE WHEN TRIM(@is_trial) = 'True' THEN 1 ELSE 0 END,
+    upgrade_flag      = CASE WHEN TRIM(@upgrade_flag) = 'True' THEN 1 ELSE 0 END,
+    downgrade_flag    = CASE WHEN TRIM(@downgrade_flag) = 'True' THEN 1 ELSE 0 END,
+    churn_flag        = CASE WHEN TRIM(@churn_flag) = 'True' THEN 1 ELSE 0 END,
+    billing_frequency = NULLIF(NULLIF(TRIM(@billing_frequency), ''), '\\N'),
+    auto_renew_flag   = CASE WHEN TRIM(@auto_renew_flag) = 'True' THEN 1 ELSE 0 END;
+
+SELECT * FROM subscriptions LIMIT 5;
+-- ---------------------------------------------------
+-- 3. LOAD ravenstack_churn_events.csv
+-- ---------------------------------------------------
+
+LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/ravenstack_churn_events.csv'
+INTO TABLE churn_events
+FIELDS TERMINATED BY ',' 
+ENCLOSED BY '"' 
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(
+    @churn_event_id, @account_id, @churn_date, @reason_code, @refund_amount_usd, 
+    @preceding_upgrade_flag, @preceding_downgrade_flag, @is_reactivation, @feedback_text
+)
+SET 
+    churn_event_id           = NULLIF(NULLIF(TRIM(@churn_event_id), ''), '\\N'),
+    account_id               = NULLIF(NULLIF(TRIM(@account_id), ''), '\\N'),
+    churn_date               = NULLIF(NULLIF(TRIM(@churn_date), ''), '\\N'),
+    reason_code              = NULLIF(NULLIF(TRIM(@reason_code), ''), '\\N'),
+    refund_amount_usd        = NULLIF(NULLIF(TRIM(@refund_amount_usd), ''), '\\N'),
+    preceding_upgrade_flag   = CASE WHEN TRIM(@preceding_upgrade_flag) = 'True' THEN 1 ELSE 0 END,
+    preceding_downgrade_flag = CASE WHEN TRIM(@preceding_downgrade_flag) = 'True' THEN 1 ELSE 0 END,
+    is_reactivation          = CASE WHEN TRIM(@is_reactivation) = 'True' THEN 1 ELSE 0 END,
+    feedback_text            = NULLIF(NULLIF(TRIM(@feedback_text), ''), '\\N');
+
+SELECT * FROM churn_events LIMIT 5;
+-- ---------------------------------------------------
+-- 4. LOAD ravenstack_feature_usage.csv
+-- ---------------------------------------------------
+
+LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/ravenstack_feature_usage.csv'
+INTO TABLE feature_usage
+FIELDS TERMINATED BY ',' 
+ENCLOSED BY '"' 
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(
+    @usage_id, @subscription_id, @usage_date, @feature_name, 
+    @usage_count, @usage_duration_secs, @error_count, @is_beta_feature
+)
+SET 
+    usage_id            = NULLIF(NULLIF(TRIM(@usage_id), ''), '\\N'),
+    subscription_id     = NULLIF(NULLIF(TRIM(@subscription_id), ''), '\\N'),
+    usage_date          = NULLIF(NULLIF(TRIM(@usage_date), ''), '\\N'),
+    feature_name        = NULLIF(NULLIF(TRIM(@feature_name), ''), '\\N'),
+    usage_count         = NULLIF(NULLIF(TRIM(@usage_count), ''), '\\N'),
+    usage_duration_secs = NULLIF(NULLIF(TRIM(@usage_duration_secs), ''), '\\N'),
+    error_count         = NULLIF(NULLIF(TRIM(@error_count), ''), '\\N'),
+    is_beta_feature     = CASE WHEN TRIM(@is_beta_feature) = 'True' THEN 1 ELSE 0 END;
+
+SELECT * FROM feature_usage LIMIT 5;
+
+-- ---------------------------------------------------
+-- 5. LOAD ravenstack_support_tickets.csv
+-- ---------------------------------------------------
+
+LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/ravenstack_support_tickets.csv'
+INTO TABLE support_tickets
+FIELDS TERMINATED BY ',' 
+ENCLOSED BY '"' 
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(
+    @ticket_id, @account_id, @submitted_at, @closed_at, @resolution_time_hours, 
+    @priority, @first_response_time_minutes, @satisfaction_score, @escalation_flag
+)
+SET 
+    ticket_id                   = NULLIF(NULLIF(TRIM(@ticket_id), ''), '\\N'),
+    account_id                  = NULLIF(NULLIF(TRIM(@account_id), ''), '\\N'),
+    submitted_at                = NULLIF(NULLIF(TRIM(@submitted_at), ''), '\\N'),
+    closed_at                   = NULLIF(NULLIF(TRIM(@closed_at), ''), '\\N'),
+    resolution_time_hours       = NULLIF(NULLIF(TRIM(@resolution_time_hours), ''), '\\N'),
+    priority                    = NULLIF(NULLIF(TRIM(@priority), ''), '\\N'),
+    first_response_time_minutes = NULLIF(NULLIF(TRIM(@first_response_time_minutes), ''), '\\N'),
+    satisfaction_score          = NULLIF(NULLIF(TRIM(@satisfaction_score), ''), '\\N'),
+    escalation_flag             = CASE WHEN TRIM(@escalation_flag) = 'True' THEN 1 ELSE 0 END;
+
+SELECT * FROM support_tickets LIMIT 5;
+
+
+SET FOREIGN_KEY_CHECKS = 1;
+
+-- ===================================================
+-- VERIFICATION ROW COUNTS
+-- ===================================================
+SELECT 'accounts' AS TableName, COUNT(*) AS TotalRows FROM accounts
+UNION ALL
+SELECT 'subscriptions', COUNT(*) FROM subscriptions
+UNION ALL
+SELECT 'churn_events', COUNT(*) FROM churn_events
+UNION ALL
+SELECT 'feature_usage', COUNT(*) FROM feature_usage
+UNION ALL
+SELECT 'support_tickets', COUNT(*) FROM support_tickets;
